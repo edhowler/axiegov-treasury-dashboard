@@ -8,9 +8,11 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 
 ## Features
 
-- Fetches and analyzes treasury transfer data within a specified date range
+- Fetches and analyzes treasury transfer data for a specific day
 - Visualizes token distribution, treasury balance over time, and transaction volumes
 - Displays top 10 largest transactions
+- Shows function signature distribution
+- Presents transfers per hour by function
 - Provides summary statistics for the analyzed period
 
 ## Technology Stack
@@ -62,7 +64,7 @@ Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To u
 ## Usage
 
 1. Enter your API key in the dashboard
-2. Select the start and end dates for the analysis
+2. Select a specific date for the analysis
 3. Click "Download and Analyze Data" to fetch and process the treasury data
 4. View the generated charts and statistics on the analysis page
 
@@ -73,6 +75,7 @@ The main components of the project are:
 - `DashboardComponent`: Handles user input and data fetching
 - `AnalysisComponent`: Displays charts and statistics
 - `DataService`: Manages API calls and data processing
+- `DataStoreService`: Stores and manages the fetched data
 
 ## License
 
