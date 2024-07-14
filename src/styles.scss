@@ -1,5 +1,18 @@
 @import '@angular/material/prebuilt-themes/indigo-pink.css';
 
-/* You can add global styles to this file, and also import other style files */
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+html,
+body {
+    height: 100%;
+    margin: 0;
+    font-family: Roboto, "Helvetica Neue", sans-serif;
+    background-color: #e0e0e0;
+}
+
+.mat-mdc-form-field {
+    width: 100%;
+}
+
+.mat-mdc-raised-button {
+    height: 48px;
+    font-size: 16px;
+}

@@ -1,66 +1,97 @@
 import { Injectable } from '@angular/core';
 
-interface TreasuryDataItem {
+export interface TreasuryDataItem {
+  blockNumber: number;
+  transactionHash: string;
+  transactionEventSignature: string;
   from: string;
-  blockTime: number;
-  tokenName: string;
+  to: string;
   tokenSymbol: string;
-  value: string;
+  tokenDecimals: number;
+  amount: string;
+  timestamp: number;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class DataStoreService {
-  private readonly STORAGE_KEY = 'treasuryData';
-  private treasuryData: { [tokenSymbol: string]: TreasuryDataItem[] } = {};
+  private treasuryData: TreasuryDataItem[] = [];
+  private exchangeRates: { [key: string]: number } | null = null;
+  private startDate: Date | null = null;
+  private endDate: Date | null = null;
 
-  constructor() {
-    this.loadFromStorage();
-  }
-
-  async setTreasuryData(data: TreasuryDataItem[]): Promise<void> {
-    this.treasuryData = data.reduce((acc, item) => {
-      if (!acc[item.tokenSymbol]) {
-        acc[item.tokenSymbol] = [];
-      }
-      acc[item.tokenSymbol].push(item);
-      return acc;
-    }, {} as { [tokenSymbol: string]: TreasuryDataItem[] });
-
-    await this.saveToStorage();
-  }
-
-  async getTreasuryData(): Promise<{ [tokenSymbol: string]: TreasuryDataItem[] } | null> {
+  getTreasuryData(): TreasuryDataItem[] {
     return this.treasuryData;
   }
 
-  getDataForToken(tokenSymbol: string): TreasuryDataItem[] | null {
-    return this.treasuryData[tokenSymbol] || null;
-  }
-
-  searchByDateRange(startDate: number, endDate: number): TreasuryDataItem[] {
-    return Object.values(this.treasuryData)
-      .flat()
-      .filter(item => item.blockTime >= startDate && item.blockTime <= endDate);
-  }
-
-  private async saveToStorage(): Promise<void> {
+  setTreasuryData(data: TreasuryDataItem[]): void {
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.treasuryData));
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-    }
-  }
-
-  private loadFromStorage(): void {
-    try {
-      const storedData = localStorage.getItem(this.STORAGE_KEY);
-      if (storedData) {
-        this.treasuryData = JSON.parse(storedData);
+      if (!this.validateData(data)) {
+        throw new Error('Invalid data format');
       }
+      this.treasuryData = data;
+      console.log('Treasury data set in service:', this.treasuryData);
     } catch (error) {
-      console.error('Error loading from localStorage:', error);
+      console.error('Error setting treasury data:', error);
+      throw error;
     }
+  }
+
+  setDateRange(startDate: Date, endDate: Date): void {
+    this.startDate = startDate;
+    this.endDate = endDate;
+  }
+
+  getDateRange(): { startDate: Date | null, endDate: Date | null } {
+    return { startDate: this.startDate, endDate: this.endDate };
+  }
+
+  setExchangeRates(rates: { [key: string]: number } | null): void {
+    if (rates) {
+      // Replace 'eth' with 'weth' if it exists
+      if ('eth' in rates) {
+        rates['weth'] = rates['eth'];
+        delete rates['eth'];
+      }
+    }
+    this.exchangeRates = rates;
+  }
+
+  getExchangeRates(): { [key: string]: number } | null {
+    return this.exchangeRates;
+  }
+
+  getDataForToken(tokenSymbol: string): TreasuryDataItem[] {
+    return this.getTreasuryData().filter(item => item.tokenSymbol === tokenSymbol);
+  }
+
+  clearData(): void {
+    this.treasuryData = [];
+  }
+
+  getTotalValueByToken(): { [key: string]: string } {
+    return this.getTreasuryData().reduce((acc, item) => {
+      if (!acc[item.tokenSymbol]) {
+        acc[item.tokenSymbol] = '0';
+      }
+      acc[item.tokenSymbol] = (BigInt(acc[item.tokenSymbol]) + BigInt(item.amount)).toString();
+      return acc;
+    }, {} as { [key: string]: string });
+  }
+
+  private validateData(data: any): data is TreasuryDataItem[] {
+    if (!Array.isArray(data)) return false;
+    return data.every(item =>
+      typeof item.blockNumber === 'number' &&
+      typeof item.transactionHash === 'string' &&
+      typeof item.transactionEventSignature === 'string' &&
+      typeof item.from === 'string' &&
+      typeof item.to === 'string' &&
+      typeof item.tokenSymbol === 'string' &&
+      typeof item.tokenDecimals === 'number' &&
+      typeof item.amount === 'string' &&
+      typeof item.timestamp === 'number' // Added timestamp check
+    );
   }
 }

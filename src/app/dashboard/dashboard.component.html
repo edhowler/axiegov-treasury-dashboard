@@ -1,4 +1,5 @@
 <div class="api-key-section">
+    <h1>AxieGov Treasury Dashboard</h1>
     <mat-form-field>
         <mat-label>API Key</mat-label>
         <input matInput type="text" [(ngModel)]="apiKey" (ngModelChange)="saveApiKey()" placeholder="Enter API Key">
@@ -21,16 +22,10 @@
         <mat-datepicker #endPicker [disabled]="!startDate"></mat-datepicker>
     </mat-form-field>
 
-    <button mat-raised-button color="primary" [disabled]="!apiKey || !startDate || !endDate"
+    <button mat-raised-button color="primary" [disabled]="!apiKey || !startDate || !endDate || isLoading"
         (click)="fetchTreasuryTransfers()">
-        Fetch Treasury Transfers
+        {{ isLoading ? 'Loading...' : 'Download and Analyze Data' }}
     </button>
-</div>
-<div *ngIf="treasuryTransfers">
-    <!-- Add your data visualization components here -->
-    <h2>Treasury Inflows and Outflows</h2>
-    <!-- Example: Display total inflow and outflow -->
-    <p>Total Inflow: {{ treasuryTransfers }}</p>
-    <p>Total Outflow: {{ treasuryTransfers }}</p>
-    <!-- Add charts, graphs, or tables here -->
+
+    <mat-progress-bar *ngIf="isLoading" mode="determinate" [value]="loadingProgress"></mat-progress-bar>
 </div>

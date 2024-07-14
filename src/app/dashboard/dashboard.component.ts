@@ -5,8 +5,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { DataService } from '../data.service';
-import { Chart } from 'chart.js';
+import { DataStoreService } from '../data-store.service';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -21,7 +23,8 @@ import { firstValueFrom } from 'rxjs';
     MatInputModule,
     MatDatepickerModule,
     MatNativeDateModule,
-    MatButtonModule
+    MatButtonModule,
+    MatProgressBarModule
   ],
   providers: [DataService]
 })
@@ -34,9 +37,14 @@ export class DashboardComponent implements OnInit {
   startDate: Date | null = null;
   endDate: Date | null = null;
   minEndDate: Date | null = null;
+  exchangeRates: { [key: string]: number } | null = null;
+  isLoading: boolean = false;
+  loadingProgress: number = 0;
 
   constructor(
     private dataService: DataService,
+    private dataStoreService: DataStoreService,
+    private router: Router
   ) { }
 
   ngOnInit(): void {
@@ -102,19 +110,39 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
+    this.isLoading = true;
+    this.loadingProgress = 0;
+
     const startTimestamp = Math.floor(this.startDate.getTime() / 1000);
     const endTimestamp = Math.floor(this.endDate.getTime() / 1000);
 
     try {
-      const newData = await firstValueFrom(this.dataService.fetchTreasuryTransfers(startTimestamp, endTimestamp, this.apiKey));
-      if (newData && newData.length > 0) {
+      // Fetch exchange rates first
+      this.exchangeRates = await firstValueFrom(this.dataService.fetchExchangeRates(this.apiKey));
+      console.log('Exchange rates:', this.exchangeRates);
+
+      const newData = await firstValueFrom(this.dataService.fetchTreasuryTransfers(
+        startTimestamp,
+        endTimestamp,
+        this.apiKey,
+        (progress) => {
+          this.loadingProgress = progress;
+        }
+      ));
+
+      if (newData && Array.isArray(newData) && newData.length > 0) {
         this.treasuryTransfers = newData;
-        this.processTreasuryTransfers();
+        this.dataStoreService.setTreasuryData(this.treasuryTransfers);
+        this.dataStoreService.setExchangeRates(this.exchangeRates);
+        this.dataStoreService.setDateRange(this.startDate, this.endDate);
+        this.router.navigate(['/analysis']);
       } else {
         console.log('No transfers to the treasury address found in the specified time range.');
       }
     } catch (error) {
-      console.error('Error fetching treasury transfers:', error);
+      console.error('Error fetching data:', error);
+    } finally {
+      this.isLoading = false;
     }
   }
 

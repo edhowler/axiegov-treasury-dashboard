@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { ethers } from 'ethers';
-import { Observable, from, forkJoin } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { Observable, from, forkJoin, of, throwError } from 'rxjs';
+import { map, mergeMap, catchError, retry, delay } from 'rxjs/operators';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 
 @Injectable({
   providedIn: 'root'
@@ -14,51 +15,85 @@ export class DataService {
     '0x97a9107c1793bc407d6f527b77e7fff4d812bece': { symbol: 'AXS', decimals: 18 },
     '0xa8754b9fa15fc18bb59458815510e40a12cd2014': { symbol: 'SLP', decimals: 0 }
   };
-  constructor() { }
+  constructor(private http: HttpClient) { }
 
-  fetchTreasuryTransfers(startTimestamp: number, endTimestamp: number, apiKey: string): Observable<any[]> {
+  fetchTreasuryTransfers(startTimestamp: number, endTimestamp: number, apiKey: string, progressCallback: (progress: number) => void): Observable<any[]> {
     const provider = this.createProvider(apiKey);
     const paddedTreasuryAddress = '0x000000000000000000000000' + this.treasuryAddress.slice(2).toLowerCase();
+    const maxBlocksPerRequest = 20;
+    const maxRetries = 5;
 
     return forkJoin([
       from(this.findClosestBlock(provider, startTimestamp)),
       from(this.findClosestBlock(provider, endTimestamp))
     ]).pipe(
       mergeMap(([startBlock, endBlock]) => {
-        const params = [{
-          fromBlock: this.toHex(startBlock),
-          toBlock: this.toHex(endBlock),
-          topics: [
-            '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', // Transfer event signature
-            null,
-            paddedTreasuryAddress
-          ]
-        }];
+        const fetchLogs = (fromBlock: number, toBlock: number): Observable<any[]> => {
+          const params = [{
+            fromBlock: this.toHex(fromBlock),
+            toBlock: this.toHex(toBlock),
+            topics: [
+              '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+              null,
+              paddedTreasuryAddress
+            ]
+          }];
 
-        return from(provider.send('eth_getLogs', params)).pipe(
-          mergeMap((logs: any[]) => {
-            const parsedLogs = logs.map((log: any) => this.parseTransferLog(log));
-            return forkJoin(
-              parsedLogs.map((log: any) =>
-                forkJoin([
-                  from(this.getBlockTimestamp(provider, log.blockNumber)),
-                  from(this.getTransactionFunction(provider, log.transactionHash))
-                ]).pipe(
-                  map(([timestamp, transactionFunction]) => ({ ...log, timestamp, transactionFunction }))
+          return from(provider.send('eth_getLogs', params)).pipe(
+            catchError(error => {
+              console.error(`Error fetching logs for blocks ${fromBlock}-${toBlock}:`, error);
+              return throwError(() => error);
+            }),
+            retry({
+              count: maxRetries,
+              delay: (error, retryCount) => {
+                const delayMs = Math.pow(2, retryCount) * 1000; // Exponential backoff
+                console.log(`Retrying in ${delay}ms...`);
+                return of(null).pipe(delay(delayMs));
+              }
+            }),
+            mergeMap((logs: any[]) => {
+              return forkJoin(
+                logs.map((log: any, index: number) =>
+                  from(this.parseTransferLog(log, provider)).pipe(
+                    map(parsedLog => {
+                      progressCallback(((fromBlock - startBlock + index + 1) / (endBlock - startBlock)) * 100);
+                      return parsedLog;
+                    }),
+                    catchError(error => {
+                      console.error('Error parsing log:', error);
+                      return of(null);
+                    })
+                  )
                 )
-              )
-            );
-          })
+              );
+            })
+          );
+        };
+
+        const observables: Observable<any[]>[] = [];
+        for (let currentBlock = startBlock; currentBlock <= endBlock; currentBlock += maxBlocksPerRequest) {
+          const toBlock = Math.min(currentBlock + maxBlocksPerRequest - 1, endBlock);
+          observables.push(fetchLogs(currentBlock, toBlock));
+        }
+
+        return forkJoin(observables).pipe(
+          map(results => results.flat().filter(log => log !== null))
         );
       })
     );
   }
 
-  private parseTransferLog(log: any): any {
+  private async parseTransferLog(log: any, provider: ethers.JsonRpcProvider): Promise<any> {
     const tokenAddress = log.address;
     const transactionEventSignature = log.topics[0];
     const from = '0x' + log.topics[1].slice(26);
     const amount = BigInt(log.data);
+
+    const [timestamp, transactionFunction] = await Promise.all([
+      this.getBlockTimestamp(provider, parseInt(log.blockNumber, 16)),
+      this.getTransactionFunction(provider, log.transactionHash)
+    ]);
 
     return {
       blockNumber: parseInt(log.blockNumber, 16),
@@ -68,7 +103,9 @@ export class DataService {
       to: this.treasuryAddress,
       tokenSymbol: this.tokenAddressToSymbol[tokenAddress.toLowerCase()].symbol,
       tokenDecimals: this.tokenAddressToSymbol[tokenAddress.toLowerCase()].decimals,
-      amount: amount.toString()
+      amount: amount.toString(),
+      timestamp,
+      transactionFunction
     };
   }
 
@@ -110,30 +147,53 @@ export class DataService {
   private async findClosestBlock(provider: ethers.JsonRpcProvider, targetTimestamp: number): Promise<number> {
     let left = 0;
     let right = await provider.getBlockNumber();
-    let closestBlock = right;
-    let closestDiff = Infinity;
 
     while (left <= right) {
       const mid = Math.floor((left + right) / 2);
       const block = await provider.getBlock(mid);
       if (!block) continue;
 
-      const diff = Math.abs(block.timestamp - targetTimestamp);
-
-      if (diff < closestDiff) {
-        closestDiff = diff;
-        closestBlock = mid;
-      }
-
-      if (block.timestamp < targetTimestamp) {
-        left = mid + 1;
-      } else if (block.timestamp > targetTimestamp) {
-        right = mid - 1;
-      } else {
+      if (block.timestamp === targetTimestamp) {
         return mid;
+      } else if (block.timestamp < targetTimestamp) {
+        left = mid + 1;
+      } else {
+        right = mid - 1;
       }
     }
 
-    return closestBlock;
+    // At this point, 'left' is the index of the closest block
+    const closestBlock = await provider.getBlock(left);
+    const previousBlock = left > 0 ? await provider.getBlock(left - 1) : null;
+
+    if (closestBlock && previousBlock) {
+      return Math.abs(closestBlock.timestamp - targetTimestamp) < Math.abs(previousBlock.timestamp - targetTimestamp) ? left : left - 1;
+    }
+
+    return left;
+  }
+
+  fetchExchangeRates(apiKey: string): Observable<{ [key: string]: number }> {
+    const url = 'https://api-gateway.skymavis.com/graphql/axie-marketplace';
+    const headers = new HttpHeaders({
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey
+    });
+
+    const queries = [
+      { token: 'eth', query: '{ exchangeRate { eth { usd } } }' },
+      { token: 'axs', query: '{ exchangeRate { axs { usd } } }' },
+      { token: 'slp', query: '{ exchangeRate { slp { usd } } }' }
+    ];
+
+    return forkJoin(
+      queries.map(({ token, query }) =>
+        this.http.post(url, { query }, { headers }).pipe(
+          map((response: any) => ({ [token]: response.data.exchangeRate[token].usd }))
+        )
+      )
+    ).pipe(
+      map(results => Object.assign({}, ...results))
+    );
   }
 }
