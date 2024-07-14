@@ -6,6 +6,7 @@ import { DataStoreService, TreasuryDataItem } from '../data-store.service';
 import { Chart, ChartConfiguration, ChartType, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import { enUS } from 'date-fns/locale';
+import { format } from 'date-fns';
 
 // Register all Chart.js components
 Chart.register(...registerables);
@@ -35,6 +36,10 @@ Chart.defaults.locale = 'en-US';
           </div>
         </div>
         <div class="chart-container">
+          <h3>Function Signature Distribution</h3>
+          <canvas #doughnutChartCanvas></canvas>
+        </div>
+        <div class="chart-container">
           <h3>Token Distribution (USD Value)</h3>
           <canvas #pieChartCanvas></canvas>
         </div>
@@ -50,6 +55,10 @@ Chart.defaults.locale = 'en-US';
           <h3>Top 10 Largest Transactions</h3>
           <canvas #horizontalBarChartCanvas></canvas>
         </div>
+        <div class="chart-container">
+          <h3>Transfers per Hour by Function</h3>
+          <canvas #transfersPerHourCanvas></canvas>
+        </div>
       </div>
       <div *ngIf="error" class="error-message">
         {{ error }}
@@ -61,17 +70,18 @@ Chart.defaults.locale = 'en-US';
     .analysis-container {
       display: flex;
       flex-direction: column;
-      align-items: center;
       padding: 20px;
     }
     .summary-stats {
       margin-bottom: 20px;
+      width: 100%;
+      max-width: 1200px;
     }
     .chart-container {
       width: 100%;
-      max-width: 600px;
-      height: 400px;
-      margin-bottom: 20px;
+      max-width: 1200px;
+      height: 628px;
+      margin-bottom: 40px;
     }
     .error-message {
       color: red;
@@ -84,6 +94,8 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
     @ViewChild('lineChartCanvas') lineChartCanvas!: ElementRef<HTMLCanvasElement>;
     @ViewChild('barChartCanvas') barChartCanvas!: ElementRef<HTMLCanvasElement>;
     @ViewChild('horizontalBarChartCanvas') horizontalBarChartCanvas!: ElementRef<HTMLCanvasElement>;
+    @ViewChild('doughnutChartCanvas') doughnutChartCanvas!: ElementRef<HTMLCanvasElement>;
+    @ViewChild('transfersPerHourCanvas') transfersPerHourCanvas!: ElementRef<HTMLCanvasElement>;
 
     error: string | null = null;
     treasuryData: TreasuryDataItem[] | null = null;
@@ -164,6 +176,8 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
         this.createLineChart();
         this.createBarChart();
         this.createHorizontalBarChart();
+        this.createDoughnutChart();
+        this.createTransfersPerHourChart();
     }
 
     private createPieChart() {
@@ -196,6 +210,7 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         position: 'top',
@@ -233,6 +248,7 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     x: {
                         type: 'time',
@@ -275,6 +291,7 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     x: {
                         type: 'time',
@@ -316,6 +333,7 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
             options: {
                 indexAxis: 'y',
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         position: 'top',
@@ -362,5 +380,168 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
 
     goBack() {
         this.router.navigate(['/']);
+    }
+
+    private createDoughnutChart() {
+        if (!this.doughnutChartCanvas) {
+            console.error('Doughnut chart canvas not available');
+            return;
+        }
+        const ctx = this.doughnutChartCanvas.nativeElement.getContext('2d');
+        if (!ctx) return;
+
+        const { labels, data } = this.calculateFunctionSignatureDistribution();
+
+        const config: ChartConfiguration = {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                        'rgba(255, 159, 64, 0.8)',
+                        'rgba(199, 199, 199, 0.8)',
+                        'rgba(83, 102, 255, 0.8)',
+                        'rgba(40, 159, 64, 0.8)',
+                        'rgba(210, 199, 199, 0.8)',
+                    ],
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'USD Distribution by Function Signature'
+                    }
+                }
+            }
+        };
+
+        this.charts['doughnut'] = new Chart(ctx, config);
+    }
+
+    private calculateFunctionSignatureDistribution(): { labels: string[], data: number[] } {
+        if (!this.treasuryData || !this.exchangeRates) return { labels: [], data: [] };
+
+        const distribution: { [key: string]: number } = {};
+
+        this.treasuryData.forEach(item => {
+            const amount = Number(item.amount) / Math.pow(10, item.tokenDecimals);
+            const usdValue = amount * (this.exchangeRates?.[item.tokenSymbol.toLowerCase()] || 0);
+
+            if (!distribution[item.transactionFunction]) {
+                distribution[item.transactionFunction] = 0;
+            }
+            distribution[item.transactionFunction] += usdValue;
+        });
+
+        const sortedDistribution = Object.entries(distribution)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10); // Get top 10 function signatures
+
+        return {
+            labels: sortedDistribution.map(([label]) => label),
+            data: sortedDistribution.map(([, value]) => value)
+        };
+    }
+
+    private createTransfersPerHourChart() {
+        const ctx = this.transfersPerHourCanvas.nativeElement.getContext('2d');
+        if (!ctx || !this.treasuryData) return;
+
+        const transfersByHourAndFunction = this.groupTransfersByHourAndFunction(this.treasuryData);
+        const hours = Array.from(new Set(this.treasuryData.map(item =>
+            format(new Date(item.timestamp * 1000), 'yyyy-MM-dd HH:00')
+        ))).sort();
+
+        const datasets = Object.entries(transfersByHourAndFunction).map(([func, data], index) => ({
+            label: func,
+            data: hours.map(hour => data[hour] || 0),
+            borderColor: this.getColor(index),
+            fill: false,
+        }));
+
+        const config: ChartConfiguration<'line'> = {
+            type: 'line',
+            data: {
+                labels: hours,
+                datasets: datasets,
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'MMM d, HH:00'
+                            }
+                        },
+                        adapters: {
+                            date: {
+                                locale: enUS
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Transfers'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Transfers per Hour by Function'
+                    }
+                }
+            }
+        };
+
+        this.charts['transfersPerHour'] = new Chart(ctx, config);
+    }
+
+    private groupTransfersByHourAndFunction(data: TreasuryDataItem[]): { [key: string]: { [key: string]: number } } {
+        return data.reduce((acc, item) => {
+            const hour = format(new Date(item.timestamp * 1000), 'yyyy-MM-dd HH:00');
+            const func = item.transactionFunction;
+
+            if (!acc[func]) acc[func] = {};
+            if (!acc[func][hour]) acc[func][hour] = 0;
+
+            acc[func][hour]++;
+            return acc;
+        }, {} as { [key: string]: { [key: string]: number } });
+    }
+
+    private getColor(index: number): string {
+        const colors = [
+            'rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 206, 86)',
+            'rgb(75, 192, 192)', 'rgb(153, 102, 255)', 'rgb(255, 159, 64)',
+            'rgb(199, 199, 199)', 'rgb(83, 102, 255)', 'rgb(40, 159, 64)',
+            'rgb(210, 199, 199)'
+        ];
+        return colors[index % colors.length];
     }
 }

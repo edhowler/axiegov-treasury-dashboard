@@ -10,6 +10,7 @@ export interface TreasuryDataItem {
   tokenDecimals: number;
   amount: string;
   timestamp: number;
+  transactionFunction: string;
 }
 
 @Injectable({

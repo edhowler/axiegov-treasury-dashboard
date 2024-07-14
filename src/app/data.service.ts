@@ -20,7 +20,7 @@ export class DataService {
   fetchTreasuryTransfers(startTimestamp: number, endTimestamp: number, apiKey: string, progressCallback: (progress: number) => void): Observable<any[]> {
     const provider = this.createProvider(apiKey);
     const paddedTreasuryAddress = '0x000000000000000000000000' + this.treasuryAddress.slice(2).toLowerCase();
-    const maxBlocksPerRequest = 20;
+    const maxBlocksPerRequest = 2000;
     const maxRetries = 5;
 
     return forkJoin([
@@ -126,7 +126,8 @@ export class DataService {
         '0x8264f2c2': 'Breed',
         '0x8aff15ec': 'Charm/Rune mint',
         '0x7ff36ab5': 'Mint',
-        '0xa9059cbb': 'Transfer'
+        '0xa9059cbb': 'Transfer',
+        '0x43afef80': 'Restore Streak for Atia\'s Blessing'
       };
       return convertionTable[functionSignature] || functionSignature;
     }
@@ -188,7 +189,7 @@ export class DataService {
 
     return forkJoin(
       queries.map(({ token, query }) =>
-        this.http.post(url, { query }, { headers }).pipe(
+        this.http.post(url, JSON.stringify({ query }), { headers }).pipe(
           map((response: any) => ({ [token]: response.data.exchangeRate[token].usd }))
         )
       )
