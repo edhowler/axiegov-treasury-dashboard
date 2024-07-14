@@ -1,0 +1,36 @@
+<div class="api-key-section">
+    <mat-form-field>
+        <mat-label>API Key</mat-label>
+        <input matInput type="text" [(ngModel)]="apiKey" (ngModelChange)="saveApiKey()" placeholder="Enter API Key">
+    </mat-form-field>
+
+    <mat-form-field>
+        <mat-label>Start Date</mat-label>
+        <input matInput [matDatepicker]="startPicker" [(ngModel)]="startDate" (ngModelChange)="onStartDateChange()">
+        <mat-hint>MM/DD/YYYY</mat-hint>
+        <mat-datepicker-toggle matIconSuffix [for]="startPicker"></mat-datepicker-toggle>
+        <mat-datepicker #startPicker></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field>
+        <mat-label>End Date</mat-label>
+        <input matInput [matDatepicker]="endPicker" [(ngModel)]="endDate" (ngModelChange)="onEndDateChange()"
+            [min]="minEndDate">
+        <mat-hint>MM/DD/YYYY</mat-hint>
+        <mat-datepicker-toggle matIconSuffix [for]="endPicker"></mat-datepicker-toggle>
+        <mat-datepicker #endPicker [disabled]="!startDate"></mat-datepicker>
+    </mat-form-field>
+
+    <button mat-raised-button color="primary" [disabled]="!apiKey || !startDate || !endDate"
+        (click)="fetchTreasuryTransfers()">
+        Fetch Treasury Transfers
+    </button>
+</div>
+<div *ngIf="treasuryTransfers">
+    <!-- Add your data visualization components here -->
+    <h2>Treasury Inflows and Outflows</h2>
+    <!-- Example: Display total inflow and outflow -->
+    <p>Total Inflow: {{ treasuryTransfers }}</p>
+    <p>Total Outflow: {{ treasuryTransfers }}</p>
+    <!-- Add charts, graphs, or tables here -->
+</div>
