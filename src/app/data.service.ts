@@ -8,7 +8,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
   providedIn: 'root'
 })
 export class DataService {
-  private rpcUrl = 'https://archive.axiedao.org/temporary-hackathon-rpc';
+  private rpcUrl = 'http://archive.axiedao.org/temporary-hackathon-rpc';
   private treasuryAddress = '0x245db945c485b68fdc429e4f7085a1761aa4d45d';
   private tokenAddressToSymbol: { [key: string]: { symbol: string, decimals: number } } = {
     '0xc99a6a985ed2cac1ef41640596c5a5f9f4e19ef5': { symbol: 'WETH', decimals: 18 },
