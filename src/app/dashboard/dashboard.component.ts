@@ -33,7 +33,7 @@ export class DashboardComponent implements OnInit {
   ethAccumulationData: any;
   inflows: any[] = [];
   outflows: any[] = [];
-  apiKey: string = '';
+  apiKey: string = 'MlWMoztEv6Rf1Wzxtsd7Nq8QhFHO47Wi';
   selectedDate: Date | null = null;
   exchangeRates: { [key: string]: number } | null = null;
   isLoading: boolean = false;
@@ -46,19 +46,7 @@ export class DashboardComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    this.loadApiKey();
     this.loadDate();
-  }
-
-  loadApiKey(): void {
-    const savedApiKey = localStorage.getItem('apiKey');
-    if (savedApiKey) {
-      this.apiKey = savedApiKey;
-    }
-  }
-
-  saveApiKey(): void {
-    localStorage.setItem('apiKey', this.apiKey);
   }
 
   loadDate(): void {
@@ -79,8 +67,8 @@ export class DashboardComponent implements OnInit {
   }
 
   async fetchTreasuryTransfers(): Promise<void> {
-    if (!this.apiKey || !this.selectedDate) {
-      console.error('API key and date are required');
+    if (!this.selectedDate) {
+      console.error('Date is required');
       return;
     }
 
@@ -100,12 +88,15 @@ export class DashboardComponent implements OnInit {
       this.exchangeRates = await firstValueFrom(this.dataService.fetchExchangeRates(this.apiKey));
       console.log('Exchange rates:', this.exchangeRates);
 
+      this.loadingProgress = 10; // Set progress to 10% after fetching exchange rates
+
       const newData = await firstValueFrom(this.dataService.fetchTreasuryTransfers(
         startTimestamp,
         endTimestamp,
         this.apiKey,
         (progress) => {
-          this.loadingProgress = progress;
+          // Ensure progress only increases
+          this.loadingProgress = Math.max(this.loadingProgress, 10 + progress * 0.8);
         }
       ));
 
@@ -114,6 +105,7 @@ export class DashboardComponent implements OnInit {
         this.dataStoreService.setTreasuryData(this.treasuryTransfers);
         this.dataStoreService.setExchangeRates(this.exchangeRates);
         this.dataStoreService.setDateRange(startOfDay, endOfDay);
+        this.loadingProgress = 100; // Set progress to 100% when done
         this.router.navigate(['/analysis']);
       } else {
         console.log('No transfers to the treasury address found in the specified time range.');

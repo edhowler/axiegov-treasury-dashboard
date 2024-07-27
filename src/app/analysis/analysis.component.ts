@@ -19,8 +19,8 @@ Chart.defaults.locale = 'en-US';
     template: `
     <div class="analysis-container">
       <h2>Treasury Data Analysis</h2>
-      <div *ngIf="dateRange.startDate && dateRange.endDate">
-        <p>Data from {{ dateRange.startDate | date:'mediumDate' }} to {{ dateRange.endDate | date:'mediumDate' }}</p>
+      <div *ngIf="dateRange.startDate">
+        <p>Data from {{ dateRange.startDate | date:'mediumDate' }}</p>
       </div>
       <div *ngIf="loading">Loading...</div>
       <div *ngIf="!loading && (!treasuryData || treasuryData.length === 0)">
@@ -275,14 +275,14 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
         const ctx = this.barChartCanvas.nativeElement.getContext('2d');
         if (!ctx || !this.treasuryData) return;
 
-        const transactionsByDay = this.groupTransactionsByDay(this.treasuryData);
-        const dates = Object.keys(transactionsByDay).map(date => new Date(date));
-        const volumes = Object.values(transactionsByDay);
+        const transactionsByHour = this.groupTransactionsByHour(this.treasuryData);
+        const hours = Object.keys(transactionsByHour).sort();
+        const volumes = hours.map(hour => transactionsByHour[hour]);
 
         const config: ChartConfiguration<'bar'> = {
             type: 'bar',
             data: {
-                labels: dates,
+                labels: hours,
                 datasets: [{
                     label: 'Transaction Volume',
                     data: volumes,
@@ -296,16 +296,33 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'day'
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'MMM d, HH:00'
+                            }
                         },
                         adapters: {
                             date: {
                                 locale: enUS
                             }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
                         }
                     },
                     y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Transactions'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Transaction Volume by Hour'
                     }
                 }
             }
@@ -359,11 +376,11 @@ export class AnalysisComponent implements OnInit, AfterViewInit {
         });
     }
 
-    private groupTransactionsByDay(data: TreasuryDataItem[]): { [key: string]: number } {
+    private groupTransactionsByHour(data: TreasuryDataItem[]): { [key: string]: number } {
         return data.reduce((acc, item) => {
             const date = new Date(item.timestamp * 1000);
-            const dateString = date.toISOString().split('T')[0];
-            acc[dateString] = (acc[dateString] || 0) + 1;
+            const hourString = format(date, 'yyyy-MM-dd HH:00');
+            acc[hourString] = (acc[hourString] || 0) + 1;
             return acc;
         }, {} as { [key: string]: number });
     }

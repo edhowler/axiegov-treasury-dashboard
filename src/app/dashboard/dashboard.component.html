@@ -1,9 +1,5 @@
 <div class="api-key-section">
     <h1>AxieGov Treasury Dashboard</h1>
-    <mat-form-field>
-        <mat-label>API Key</mat-label>
-        <input matInput type="password" [(ngModel)]="apiKey" (ngModelChange)="saveApiKey()" placeholder="Enter API Key">
-    </mat-form-field>
 
     <mat-form-field>
         <mat-label>Select Date</mat-label>
@@ -13,7 +9,7 @@
         <mat-datepicker #datePicker></mat-datepicker>
     </mat-form-field>
 
-    <button mat-raised-button color="primary" [disabled]="!apiKey || !selectedDate || isLoading"
+    <button mat-raised-button color="primary" [disabled]="!selectedDate || isLoading"
         (click)="fetchTreasuryTransfers()">
         {{ isLoading ? 'Loading...' : 'Download and Analyze Data' }}
     </button>
